@@ -1,5 +1,5 @@
 {
-  "pluginAlias": "ExampleHomebridgePlugin",
+  "pluginAlias": "DooyaController",
   "pluginType": "platform",
   "singular": true,
   "schema": {
@@ -9,7 +9,26 @@
         "title": "Name",
         "type": "string",
         "required": true,
-        "default": "Example Dynamic Platform"
+        "default": "Shade"
+      }
+      "channel": {
+        "title": "Channel",
+        "type": "number",
+        "required": true,
+        "default": "0",
+        "placeholder": "0-15"
+      }
+      "channelCode": {
+        "title": "Channel Code",
+        "type": "string",
+        "required": true,
+        "default": "BF",
+        "placeholder": "2 hex digits"
+      }
+      "timeToClose": {
+        "title": "Time in seconds to open or close",
+        "type": "number",
+        "required": true
       }
     }
   }
