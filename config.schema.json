@@ -70,7 +70,7 @@
         "required": true,
         "default": 60
       },
-      "overrideArduinoConfig": {
+      "enableTransmitterConfig": {
         "title": "Override configuration on Transmitter.",
         "description": "Override the default configuration on the Arduino Transmitter.",
         "type": "boolean",
@@ -148,6 +148,12 @@
           "name": "Shade Channel Config",
           "type": "object",
           "properties": {
+            "enabled": {
+              "title": "Enabled",
+              "type": "boolean",
+              "required": true,
+              "default": "true"
+            },
             "displayName": {
               "title": "Name",
               "type": "string",

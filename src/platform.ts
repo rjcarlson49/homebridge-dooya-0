@@ -29,6 +29,7 @@ export class DooyaHomebridgePlatform implements DynamicPlatformPlugin {
   private xmitWait = 1000;
   private nowBase = 0;
   public dooyaObjects;
+  public dooyaGroupObject: DooyaAccessory;
 
   constructor(
     public readonly log: Logger,
@@ -45,6 +46,9 @@ export class DooyaHomebridgePlatform implements DynamicPlatformPlugin {
     this.nowBase = 0;
     this.now();
     this.dooyaObjects = []; // Empty array to start
+    this.dooyaGroupObject = <DooyaAccessory><unknown>undefined;
+
+    this.setupTransmitterConfig();
 
     // When this event is fired it means Homebridge has restored all cached accessories from disk.
     // Dynamic Platform plugins should only register new accessories after this event was fired,
@@ -57,6 +61,18 @@ export class DooyaHomebridgePlatform implements DynamicPlatformPlugin {
     });
   }
 
+  setGroupObject(dooya: DooyaAccessory) {
+    this.dooyaGroupObject = dooya;
+  }
+
+  isGroupShadeStopped(): boolean {
+    if (this.dooyaGroupObject !== undefined) {
+      return (this.dooyaGroupObject.positionState === 2);
+    } else {
+      return false;
+    }
+  }
+  
   requestUpdateSlot(id: string, callback: requestSlotCallback) {
     if (this.requestQueue === undefined) {
       this.requestQueue = [];
@@ -224,26 +240,24 @@ export class DooyaHomebridgePlatform implements DynamicPlatformPlugin {
       // it is possible to remove platform accessories at any time using `api.unregisterPlatformAccessories`, eg.:
       // this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
     }
-
   }
 
   setupTransmitterConfig() {
+    let xmitConfig = '';
 
-    if (this.config.overrideArduinoConfig) {
-      let xmitConfig = '';
+    xmitConfig = '!' + this.config.zeroOn;
+    xmitConfig += ',' + this.config.zeroOff;
+    xmitConfig += ',' + this.config.oneOn;
+    xmitConfig += ',' + this.config.oneOff;
+    xmitConfig += ',' + this.config.startOfRowOn;
+    xmitConfig += ',' + this.config.startOfRowOff;
+    xmitConfig += ',' + this.config.endOfRowOff;
+    xmitConfig += ',' + this.config.endOfMsgOff;
+    xmitConfig += ',' + this.config.dataPin;
 
-      xmitConfig = '!' + this.config.zeroOn;
-      xmitConfig += ',' + this.config.zeroOff;
-      xmitConfig += '!' + this.config.oneOn;
-      xmitConfig += ',' + this.config.oneOff;
-      xmitConfig += '!' + this.config.startOfRowOn;
-      xmitConfig += ',' + this.config.startOfRowOff;
-      xmitConfig += ',' + this.config.endOfRowOff;
-      xmitConfig += ',' + this.config.startOfMsgOff;
-      xmitConfig += ',' + this.config.dataPin;
-
+    this.log.info('Transmitter Config: ' + xmitConfig);
+    if (this.config.enableTransmitterConfig) {
       //this.arduinoPort.write(xmitConfig + '\n');
-      this.log.info('Transmitter Config: ' + xmitConfig);
     }
   }
 

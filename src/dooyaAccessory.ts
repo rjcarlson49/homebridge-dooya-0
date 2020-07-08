@@ -14,8 +14,10 @@ enum PosState {
  */
 export class DooyaAccessory {
   private service: Service;
-  //private swServiceOpen: Service;
-  //private swServiceClose: Service;
+  private swServiceOpen: Service;
+  private swServiceClose: Service;
+
+  private enabled: boolean;         // When false, the shade never moves or appears to move in the app
 
   /**
    * These are just used to create a working example
@@ -23,11 +25,11 @@ export class DooyaAccessory {
    */
   private currentPosition: number; // 0-100, 100 is fully open, 0 is fully closed
   private targetPosition: number;
-  private positionState: number;   // 0 - decreasing, 1 - increasing, 2 - stopped
+  public positionState: number;   // 0 - decreasing, 1 - increasing, 2 - stopped
   private silent: boolean;         // When true the shade is moving, but commands are not sent
 
-  private switchPosOpen: boolean;
-  private switchPosClose: boolean;
+  private swOpenOn: boolean;
+  private swCloseOn: boolean;
 
   // Particular to the Accessory
   private id: string; // Place UUID here for reference
@@ -64,6 +66,7 @@ export class DooyaAccessory {
     private readonly accessory: PlatformAccessory) {
 
     this.displayName = this.accessory.context.device.displayName;
+    this.enabled = this.accessory.context.device.enabled;
     this.debounce = this.platform.config.debounce;
     this.tickFudge = this.platform.config.tickFudge;
     this.fixedCode = this.platform.config.fixedCode;
@@ -74,7 +77,10 @@ export class DooyaAccessory {
     this.id = this.accessory.UUID;
     this.channelNum = this.accessory.context.device.channelNum;
     this.channelCode = this.accessory.context.device.channelCode;
-    this.groupCode = this.accessory.context.device.groupCode; 
+    this.groupCode = this.accessory.context.device.groupCode;
+    if (this.groupCode) {
+      this.platform.setGroupObject(this);
+    } 
     this.maxTime = this.accessory.context.device.maxTime; // In seconds
     this.tickTime = this.maxTime * 10 - this.tickFudge; // Number of ms in 1% of maxTime
     this.silent = false;
@@ -92,29 +98,30 @@ export class DooyaAccessory {
     this.service = this.accessory.getService(this.platform.Service.WindowCovering) 
                 || this.accessory.addService(this.platform.Service.WindowCovering);
     
-    //this.swServiceOpen = this.accessory.getService(this.platform.Service.Switch) 
-    //                  || this.accessory.addService(this.platform.Service.Switch, this.displayName + ' Open', 'Open');
+    this.swServiceOpen = <Service>this.accessory.getServiceById(this.platform.Service.Switch, 'Open');
+    if (!this.swServiceOpen) {
+      this.swServiceOpen = new this.platform.Service.Switch(this.displayName + ' Open', 'Open');
+      if (this.swServiceOpen) {
+        this.swServiceOpen = this.accessory.addService(this.swServiceOpen);
+        this.logCh('New Open Switch Service');
+      } else {
+        this.logCh('New Open Switch Service -- Failed!');
+      }
+    } 
+    this.swServiceClose = <Service>this.accessory.getServiceById(this.platform.Service.Switch, 'Close');
+    if (!this.swServiceClose) {
+      this.swServiceClose = new this.platform.Service.Switch(this.displayName + ' Close', 'Close');
+      if (this.swServiceClose) {
+        this.swServiceClose = this.accessory.addService(this.swServiceClose);
+        this.logCh('New Close Switch Service');
+      } else {
+        this.logCh('New Close Switch Service -- Failed!');
+      }
+    } 
     
-    //this.swServiceClose = this.accessory.getService(this.platform.Service.Switch)
-    //                  || this.accessory.addService(this.platform.Service.Switch), this.displayName + ' Close', 'Close';
-
-    //this.swServiceOpen.displayName = this.displayName + ' Open';
-    //this.swServiceOpen.subtype = 'Open';
-    //this.swServiceClose.displayName = this.displayName + ' Close';
-    //this.swServiceClose.subtype = 'Close';
-    
-    // To avoid "Cannot add a Service with the same UUID another Service without also defining a unique 'subtype' property." error,
-    // when creating multiple services of the same type, you need to use the following syntax to specify a name and subtype id:
-    // this.accessory.getService('NAME') ?? this.accessory.addService(this.platform.Service.Lightbulb, 'NAME', 'USER_DEFINED_SUBTYPE');
-
     // set the service name, this is what is displayed as the default name on the Home app
     // in this example we are using the name we stored in the `accessory.context` in the `discoverDevices` method.
     this.service.setCharacteristic(this.platform.Characteristic.Name, this.displayName);
-
-    //this.swServiceOpen.setCharacteristic(this.platform.Characteristic.Name, this.displayName + ' Open');
-    //this.swServiceClose.setCharacteristic(this.platform.Characteristic.Name, this.displayName + ' Close');
-    // each service must implement at-minimum the "required characteristics" for the given service type
-    // see https://developers.homebridge.io/#/service/Lightbulb
 
     this.targetPosition = 100;
     if (accessory.context.tP >= 0 && accessory.context.tP <= 100) {
@@ -124,8 +131,8 @@ export class DooyaAccessory {
     this.currentPosition = this.targetPosition;
     this.positionState = PosState.Stopped; // Aways start assuming shade is not moving
 
-    this.switchPosOpen = false;
-    this.switchPosClose = false;
+    this.swOpenOn = false;
+    this.swCloseOn = false;
 
     this.logState();
 
@@ -141,8 +148,8 @@ export class DooyaAccessory {
     // register handlers for the PositionState Characteristic
     this.service.getCharacteristic(this.platform.Characteristic.PositionState)
       .on('get', this.getPosState.bind(this));       // GET - bind to the 'getPosState` method below
-    
-    /*
+        
+    // Set Handlers for Open/Close switches
     this.swServiceOpen.getCharacteristic(this.platform.Characteristic.On)!
       .on('set', this.setSwitchOpen.bind(this))       // SET - bind to the 'setSwitchOpen` method below
       .on('get', this.getSwitchOpen.bind(this));       // SET - bind to the 'getSwitchOpen` method below
@@ -150,12 +157,7 @@ export class DooyaAccessory {
     this.swServiceClose.getCharacteristic(this.platform.Characteristic.On)!
       .on('set', this.setSwitchClose.bind(this))       // SET - bind to the 'setSwitchClose` method below
       .on('get', this.getSwitchClose.bind(this));       // SET - bind to the 'getSwitchClose` method below
-    */
 
-    this.updateState();
-    this.updateTarget();
-    this.updateCurrent();
-  
     // EXAMPLE ONLY
     // Example showing how to update the state of a Characteristic asynchronously instead
     // of using the `on('get')` handlers.
@@ -189,25 +191,47 @@ export class DooyaAccessory {
    * this.service.updateCharacteristic(this.platform.Characteristic.On, true)
    */
   setSwitchOpen(value: CharacteristicValue, callback: CharacteristicSetCallback) {
-    this.switchPosOpen = value as boolean;
-    this.logCh('setSwitchOpen ' + this.switchPosClose);
+    if (!this.enabled && !this.groupCode) {
+      callback(new Error('Disabled'));
+      return;
+    }
+
+    this.swOpenOn = value as boolean;
+    if (this.swOpenOn) {
+      this.updateTarget(100, false);
+      this.setTargetDebounced(); // Start an Open operation
+    } else {
+      this.stopMoving();
+    }
+    this.logCh('setSwitchOpen ' + this.swOpenOn);
     callback(null);
   }
 
   getSwitchOpen(callback: CharacteristicGetCallback) {
-    this.logCh('getSwitchOpen ' + this.switchPosClose);
-    callback(null, this.switchPosOpen);
+    this.logCh('getSwitchOpen ' + this.swOpenOn);
+    callback(null, this.swOpenOn);
   }
 
   setSwitchClose(value: CharacteristicValue, callback: CharacteristicSetCallback) {
-    this.switchPosClose = value as boolean;
-    this.logCh('setSwitchClose ' + this.switchPosClose);
+    if (!this.enabled && !this.groupCode) {
+      callback(new Error('Disabled'));
+      return;
+    }
+    
+    this.swCloseOn = value as boolean;
+    if (this.swCloseOn) {
+      this.updateTarget(0, false);
+      this.setTargetDebounced(); // Start an Open operation
+    } else {
+      this.stopMoving();
+    }
+    this.logCh('setSwitchClose ' + this.swCloseOn);
     callback(null);
   }
 
   getSwitchClose(callback: CharacteristicGetCallback) {
-    this.logCh('getSwitchClose ' + this.switchPosClose);
-    //callback(null, this.switchPosClose);
+    this.logCh('getSwitchClose ' + this.swCloseOn);
+    callback(null, this.swCloseOn);
   }
 
   getCurrentPos(callback: CharacteristicGetCallback) {
@@ -246,10 +270,13 @@ export class DooyaAccessory {
    * These are sent when the user changes the state of an accessory, for example, changing the Target Position
    */
   setTargetPos(value: CharacteristicValue, callback: CharacteristicSetCallback) {
+    if (!this.enabled && !this.groupCode) {
+      callback(new Error('Disabled'));
+      return;
+    }
     
     // Go ahead and set, will not be acted upon until debounce is complete
-    this.targetPosition = value as number;
-    this.accessory.context.tP = this.targetPosition; // Preserve across restarts
+    this.updateTarget(value as number, true);
 
     this.logCh('Set Target on ' + this.displayName + 
                ' To ' + value + 
@@ -259,43 +286,45 @@ export class DooyaAccessory {
     if (this.debounceObject !== null) {
       clearTimeout(this.debounceObject);
     }
-    this.debounceObject = setTimeout(this.debounceComplete.bind(this), this.debounce);  
+    this.debounceObject = setTimeout(this.setTargetDebounced.bind(this), this.debounce);  
 
     // you must call the callback function
     callback(null);
   }
 
-  debounceComplete() {
-    /*
-     * Determine if we have a group channel or not
-     * If Group
-     *    if target is 0 or 100 send the group command
-     *       setGroupTarget(t, silent) to each member of the group
-     *    else if 0 < target < 100
-     *       setGroupTarget(t, !silent) to each member of the group
-     *       run this group device in silent mode
-     * Else
-     *   Proceed normally
-     */
+  setTargetDebounced(){
     if (this.groupCode) {
-      this.debounceCompleteGroup();
+      this.setTargetPosGroupDebounced();
     } else {
-      this.silent = false;
-      this.executeSetTarget();
-      // Find the group shade and adjust its target
-      for (let index = 0; index < this.platform.dooyaObjects.length; index++) {
-        const dooya = <unknown>this.platform.dooyaObjects[index] as DooyaAccessory;
-        if (dooya.groupCode) { 
-          // Set the group accessory silently
-          dooya.updateGroupTarget();
-        }
-      }
+      this.setTargetPosDebounced();
     }
   }
 
-  debounceCompleteGroup() {
-    // This is the group channel that affects all channels (shades)
-    if (this.targetPosition === 0 || this.targetPosition === 100) {
+  setTargetPosDebounced() {
+    /*
+     * This is not a group shade.
+     * Find the group shade and update its target position.
+     */
+    if (!this.enabled) {
+      this.updateTarget(PosState.Stopped, false);
+      return;
+    }
+
+    this.silent = false;
+    this.executeSetTarget();
+  }
+
+  setTargetPosGroupDebounced() {
+    /*
+     * if target is 0 or 100 send the group command
+     *   setGroupTarget(t, silent) to each member of the group
+     * else if 0 < target < 100
+     *   setGroupTarget(t, !silent) to each member of the group
+     *   run this group device in silent mode
+     */
+    if (!this.enabled) {
+      this.silent = true;
+    } else if (this.targetPosition === 0 || this.targetPosition === 100) {
       /*
        * The target is either fully open or closed, so we DO  
        * send the open or close signal on the Group channel.
@@ -315,7 +344,6 @@ export class DooyaAccessory {
        */
       this.silent = true;
     }
-    this.executeSetTarget();
     for (let index = 0; index < this.platform.dooyaObjects.length; index++) {
       const dooya = <unknown>this.platform.dooyaObjects[index] as DooyaAccessory;
       if (this.id !== dooya.id) { 
@@ -323,32 +351,52 @@ export class DooyaAccessory {
         dooya.setGroupTarget(this.targetPosition, !this.silent);
       }
     }
+    this.executeSetTarget();
   }
   
+  // When non-group shades get a new target, they call this method so that the 
+  // group shade can update its target
   updateGroupTarget() {
+    // Other shades are moving, make the 'group' position an average
     const len = this.platform.dooyaObjects.length;
     let total = 0;
 
+    // First find the average target position of the non-group shades
     for (let index = 0; index < len; index++) {
       const dooya = <unknown>this.platform.dooyaObjects[index] as DooyaAccessory;
       if (!dooya.groupCode) { 
         // Set all other DooyaAccessory except this one
-        total += dooya.targetPosition;
+        total += dooya.currentPosition;
       }
     }
+    // Now set that as the target, beware divide by zero.
     if (len > 1) {
-      this.targetPosition = Math.floor(total / (len-1));
+      this.currentPosition = Math.floor(total / (len-1));
     } else {
-      this.targetPosition = 50; // Should be impossible
+      this.currentPosition = 50; // Should be impossible
     }
+    this.updateTarget(this.currentPosition, false);
+    this.updateCurrent();
     this.logCh('updateGroupTarget: ' + this.targetPosition + '  current: ' + this.currentPosition);
-    this.silent = true;
-    this.executeSetTarget();
   }
-  
+
+  areNonGroupShadesStopped(): boolean {
+    // Check the non-group shades, return false if any are moving
+    for (let index = 0; index < this.platform.dooyaObjects.length; index++) {
+      const dooya = <unknown>this.platform.dooyaObjects[index] as DooyaAccessory;
+      if (!dooya.groupCode && dooya.positionState !== PosState.Stopped) { 
+        return false;
+      }
+    }
+    return true;
+  }
+
   setGroupTarget(value: number, silent: boolean) {
     // An internal call from a "group" channel that effects all shades
     // silent means to send no commands, just do tick operations
+    if (!this.enabled) {
+      return;
+    }
     this.logCh('setGroupTarget ' + value + ' on ' + this.displayName);
     if (value < 0) {
       value = 0;
@@ -360,28 +408,19 @@ export class DooyaAccessory {
     
     if (this.groupCode) {
       // Can't really happen
+      this.logCh('Error - setGroupTarget called on a Group channel');
     } else {
-      this.targetPosition = value;
+      this.updateTarget(value, false);
       this.silent = silent;
-      this.executeSetTarget(); // The signal is already debounced
+      this.executeSetTarget(); 
     }
   }
   
   executeSetTarget() {
     this.logCh('executeSetTarget: ' + this.targetPosition);
-    if (this.groupCode && this.silent) {
-      /* 
-       * If it's the group channel and silent, just upate to 
-       * the new state. Don't count silently.
-       */
-      this.currentPosition = this.targetPosition;
-      this.positionState = PosState.Stopped;
-      this.updateState();
-      this.updateCurrent();
-      this.updateTarget();
-    } else if (this.targetPosition === 0) {
+    if (this.targetPosition === 0) {
       // Closing
-      this.positionState = PosState.Decreasing; // Decreasing
+      this.updateState(PosState.Decreasing);
       if (this.silent) {
         this.startMoving();
       } else {
@@ -389,7 +428,7 @@ export class DooyaAccessory {
       }
     } else if (this.targetPosition === 100) {
       // Opening
-      this.positionState = PosState.Increasing; // Increasing
+      this.updateState(PosState.Increasing);
       if (this.silent) {
         this.startMoving();
       } else {
@@ -400,20 +439,18 @@ export class DooyaAccessory {
       // we check for 0 or 100 first because we want to send 
       // a code regardless of whether we think the shade is 
       // already positioned. Because we don't really know where it is.
-      this.positionState = PosState.Stopped;
       this.stopMoving();
     } else if (this.targetPosition > this.currentPosition) {
       // Opening
-      this.positionState = PosState.Increasing; // Increasing
+      this.updateState(PosState.Increasing);
       if (this.silent) {
         this.startMoving();
       } else {
         this.platform.queueToXmitter(this.openCmdString, this.startMoving.bind(this), this.channelNum);
       }
-      
     } else { // this.targetPosition < this.currentPosition)
       // Closing
-      this.positionState = PosState.Decreasing; // Decreasing
+      this.updateState(PosState.Decreasing);
       if (this.silent) {
         this.startMoving();
       } else {
@@ -424,31 +461,41 @@ export class DooyaAccessory {
   }
 
   tick() {
+    if (this.silent) {
+      if (this.groupCode) {
+        if (this.areNonGroupShadesStopped()) {
+          // We have to stop too
+          this.positionState = PosState.Stopped;
+          this.currentPosition = this.targetPosition;
+        }
+      } else { // !this.groupCode
+        // If a non-group shade and running silently, watch the group shade for a "stop"
+        if (this.platform.isGroupShadeStopped()) {
+          // We have to stop too
+          this.positionState = PosState.Stopped;
+          this.currentPosition = this.targetPosition;
+        }
+      }
+    }
     if (this.positionState === PosState.Decreasing) {
       // Closing, Decreasing
       this.currentPosition -= 1;
     } else if (this.positionState === PosState.Increasing) {
       // Opening, Increasing
       this.currentPosition += 1;
-    } else { // posState 2 - Stopped
-      // Should never happen
-      this.currentPosition = this.targetPosition;
-      this.stopMoving();
     }
     if (this.currentPosition < 0) {
       this.logCh('currentPosition Error: ' + this.currentPosition);
       this.currentPosition = 0;
-      this.stopMoving();
     } else if (this.currentPosition > 100) {
       this.logCh('currentPosition Error: ' + this.currentPosition);
       this.currentPosition = 100;
-      this.stopMoving();
     }
-    //this.updateCurrent();
     
     if (this.currentPosition === 0 
     || this.currentPosition === 100
-    || this.currentPosition === this.targetPosition) {
+    || this.currentPosition === this.targetPosition
+    || this.positionState === PosState.Stopped) {
       this.stopMoving();
     }
   }
@@ -461,64 +508,89 @@ export class DooyaAccessory {
                    ') tickTime ' + this.tickTime);
   }
 
-  updateState() {
-    this.platform.requestUpdateSlot('Ch[' + this.channelNum + '] updateState', this.updateStateCB.bind(this));
-    if (this.groupCode) {
-      this.logTimeCh('Update state...');
+  updateState(newSetting: PosState) {
+    if (newSetting !== this.positionState) {
+      this.positionState = newSetting;
+      const s = 'Ch[' + this.channelNum + '] updateState ' + this.positionState;
+      this.platform.requestUpdateSlot(s, this.updateStateCB.bind(this));
+      this.logTimeCh('Update state... ' + this.positionState);
     }
   }
 
   updateStateCB() {
+    this.logTimeCh('Update state: ' + this.positionState);
     this.service.getCharacteristic(this.platform.Characteristic.PositionState).updateValue(this.positionState);
-    this.logTimeCh('Update state:' + this.positionState);
   }
   
   updateCurrent() {
-    this.platform.requestUpdateSlot('Ch[' + this.channelNum + '] updateCurrent', this.updateCurrentCB.bind(this));
-    if (this.groupCode) {
-      this.logTimeCh('Update Current...');
+    if (this.positionState === PosState.Stopped) {
+      this.logTimeCh('Update Current... ' + this.currentPosition);
     }
+    const s = 'Ch[' + this.channelNum + '] updateCurrent ' + this.currentPosition;
+    this.platform.requestUpdateSlot(s, this.updateCurrentCB.bind(this));
   }
 
   updateCurrentCB() {
-    this.service.getCharacteristic(this.platform.Characteristic.CurrentPosition).updateValue(this.currentPosition);
-    if (this.groupCode) {
-      this.logTimeCh('Update current:' + this.currentPosition);
+    if (this.positionState === PosState.Stopped) {
+      this.logTimeCh('Update current: ' + this.currentPosition);
     }
+    this.service.getCharacteristic(this.platform.Characteristic.CurrentPosition).updateValue(this.currentPosition);
   }
 
-  updateTarget() {
-    this.platform.requestUpdateSlot('Ch[' + this.channelNum + '] updateTarget', this.updateTargetCB.bind(this));
-    if (this.groupCode) {
-      this.logTimeCh('Update Target...');
+  updateTarget(newSetting: number, localOnly: boolean) {
+    if (newSetting !== this.targetPosition) {
+      this.targetPosition = newSetting;
+      this.accessory.context.tP = this.targetPosition; // Preserve across restarts
+      if (!localOnly) {
+        this.logTimeCh('Update Target... ' + this.targetPosition);
+        const s = 'Ch[' + this.channelNum + '] updateTarget ' + this.targetPosition;
+        this.platform.requestUpdateSlot(s, this.updateTargetCB.bind(this));
+      }
     }
   }
 
   updateTargetCB() {
+    this.logTimeCh('Update target: ' + this.targetPosition);
     this.service.getCharacteristic(this.platform.Characteristic.TargetPosition).updateValue(this.targetPosition);
-    if (this.groupCode) {
-      this.logTimeCh('Update target:' + this.targetPosition);
-    }
+  }
+
+  updateSwitchOpen() {
+    const s = 'Ch[' + this.channelNum + '] updateSwitchOpen ' + this.swOpenOn;
+    this.platform.requestUpdateSlot(s, this.updateSwitchOpenCB.bind(this));
+  }
+
+  updateSwitchOpenCB() {
+    this.logTimeCh('Update Open: ' + this.swOpenOn);
+    this.swServiceOpen.getCharacteristic(this.platform.Characteristic.On).updateValue(this.swOpenOn);
+  }
+
+  updateSwitchClose() {
+    const s = 'Ch[' + this.channelNum + '] updateSwitchClose ' + this.swCloseOn;
+    this.platform.requestUpdateSlot(s, this.updateSwitchCloseCB.bind(this));
+  }
+
+  updateSwitchCloseCB() {
+    this.logTimeCh('Update Close: ' + this.swCloseOn);
+    this.swServiceClose.getCharacteristic(this.platform.Characteristic.On).updateValue(this.swCloseOn);
   }
 
   startMoving() {
     //this.logCh('startMoving ', this.tickTime);
-    this.currentPosition = Math.floor(this.currentPosition);
-    this.targetPosition = Math.floor(this.targetPosition);
-
-    this.updateState();
+    this.currentPosition = Math.floor(this.currentPosition); // Make certain an integer omparison 
+    this.targetPosition = Math.floor(this.targetPosition);   // does not fail because of a fraction
     if (this.tickerObject !== null) {
       clearInterval(this.tickerObject);
     }
     this.showTick();
     this.tickerObject = setInterval(this.tick.bind(this), this.tickTime);
+    this.adjustSwitches();
   }
 
   stopMoving() {
-    this.logCh('Stopped');
+    this.logTimeCh('Stopped');
     //this.platform.log.info('stopMoving');
-    this.positionState = PosState.Stopped;
-    this.updateState();
+    this.updateTarget(this.currentPosition, false);
+    this.updateState(PosState.Stopped);
     this.updateCurrent();
     if (this.currentPosition > 0 && this.currentPosition < 100) {
       if (!this.silent) {
@@ -527,11 +599,59 @@ export class DooyaAccessory {
     }
     this.silent = false;
     this.showTick();
-    if (this.tickerObject === null) {
-      return;
+    if (this.tickerObject !== null) {
+      clearInterval(this.tickerObject);
+      this.tickerObject = null;
     }
-    clearInterval(this.tickerObject);
-    this.tickerObject = null;
+    // Let the group channel update its targetPosition
+    if (!this.silent && !this.groupCode) {
+      this.platform.dooyaGroupObject.updateGroupTarget(); 
+    }
+    this.adjustSwitches();
+  }
+
+  adjustSwitches() {
+    if (this.silent) {
+      // Switches stay off during silent running
+      if (this.swCloseOn) {
+        this.swCloseOn = false;
+        this.updateSwitchClose();
+      }
+      if (this.swOpenOn) {
+        this.swCloseOn = false;
+        this.updateSwitchClose();
+      }
+    } else if (this.positionState === PosState.Decreasing) {
+      // Closing
+      if (!this.swCloseOn) {
+        this.swCloseOn = true;
+        this.updateSwitchClose();
+      }
+      if (this.swOpenOn) {
+        this.swCloseOn = false;
+        this.updateSwitchClose();
+      }
+    } else if (this.positionState === PosState.Increasing) {
+      // Opening
+      if (this.swCloseOn) {
+        this.swCloseOn = false;
+        this.updateSwitchClose();
+      }
+      if (!this.swOpenOn) {
+        this.swOpenOn = true;
+        this.updateSwitchOpen();
+      }
+    } else { // this.positionState === PosState.Stopped
+      // Stopped
+      if (this.swCloseOn) {
+        this.swCloseOn = false;
+        this.updateSwitchClose();
+      }
+      if (this.swOpenOn) {
+        this.swOpenOn = false;
+        this.updateSwitchOpen();
+      }
+    }
   }
 
   dummyCallback() {
