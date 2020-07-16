@@ -47,14 +47,14 @@
         "description": "e.g. '/dev/ttyUSB0'",
         "type": "number",
         "required": true,
-        "default": 1000
+        "default": 500
       },
       "xmitWait": {
-        "title": "Transmit Wait Time in MS",
+        "title": "Transmit Timeout (mSec)",
         "description": "Transmitter takes a long time to send and is blocked during that time",
         "type": "number",
         "required": true,
-        "default": 1000
+        "default": 2500
       },
       "updateWait": {
         "title": "Time in MS between update characteristic calls (back to Homekit)",
@@ -139,6 +139,13 @@
         "type": "number",
         "required": true,
         "default": 12
+      },
+      "debugFlags": {
+        "title": "Debug Flags",
+        "description": "Debug Flags",
+        "type": "number",
+        "required": true,
+        "default": 0
       },
       "shades": {
         "title": "Shade Channels",

@@ -3,6 +3,14 @@ import { API, DynamicPlatformPlugin, Logger, PlatformAccessory, PlatformConfig, 
 import { PLATFORM_NAME, PLUGIN_NAME } from './settings';
 import { DooyaAccessory } from './dooyaAccessory';
 
+enum D {
+  ANY = -1,
+  REQ_Q = 0, 
+  XMIT_Q = 1,
+  XMITTER = 2,
+  OTHER = 3,   
+}
+
 interface QXmitCallback {():void;}
 interface requestSlotCallback {():void;}
 type RequestTuple = [string, requestSlotCallback];
@@ -19,14 +27,19 @@ export class DooyaHomebridgePlatform implements DynamicPlatformPlugin {
   // this is used to track restored cached accessories
   public readonly accessories: PlatformAccessory[] = [];
 
+  private debugFlags = 0;
   private SerialPort;
   private arduinoPort;
+  private Delimiter;
+  private arduinoPortParser;
   private requestQueue;
   private requestAvailable = true;
   private requestWait = 200;
   private xmitQueue;
   private xmitAvailable = true;
   private xmitWait = 1000;
+  private xmitTimeoutObject;
+  
   private nowBase = 0;
   public dooyaObjects;
   public dooyaGroupObject: DooyaAccessory;
@@ -39,10 +52,25 @@ export class DooyaHomebridgePlatform implements DynamicPlatformPlugin {
     this.log.info('Serial Port:', this.config.serialPort);
 
     this.SerialPort = require('serialport');
-    this.arduinoPort = new this.SerialPort(this.config.serialPort, {baudRate: 9600});
-    this.xmitWait = this.config.xmitWait;
+    this.arduinoPort = new this.SerialPort(this.config.serialPort, {baudRate: 115200});
+    this.Delimiter = require('@serialport/parser-delimiter');
+    this.arduinoPortParser = this.arduinoPort.pipe(new this.Delimiter({ delimiter: '\n' }));
+    //parser.on('data', console.log) // emits data after every '\n'
+    this.arduinoPortParser.on('data', this.arduinoPortRead.bind(this));
+
+    this.debugFlags = this.config.debugFlags;
+
     this.requestWait = this.config.updateWait;
-    this.logTime('requestWait: ' + this.requestWait + ' xmitWait: ' + this.xmitWait);
+    this.requestQueue = [];
+    this.requestAvailable = true;
+
+    this.xmitWait = this.config.xmitWait;
+    this.xmitQueue = [];
+    this.xmitAvailable = true;
+    this.xmitTimeoutObject = undefined;
+
+    this.logTime(D.ANY, 'requestWait: ' + this.requestWait + ' xmitWait: ' + this.xmitWait);
+    
     this.nowBase = 0;
     this.now();
     this.dooyaObjects = []; // Empty array to start
@@ -74,19 +102,15 @@ export class DooyaHomebridgePlatform implements DynamicPlatformPlugin {
   }
   
   requestUpdateSlot(id: string, callback: requestSlotCallback) {
-    if (this.requestQueue === undefined) {
-      this.requestQueue = [];
-      this.requestAvailable = true;
-    }
     const tuple = [id, callback];
     if (this.requestAvailable) {
       this.requestGrant(tuple);
-      this.logTime('requestUpdateSlot for ' + id);
+      this.logTime(D.REQ_Q, 'requestUpdateSlot for ' + id);
     } else {
       // requestAvailable false means a timeout is already active
       this.requestDelete(id);
       this.requestQueue.push(tuple);
-      this.logTime('requestUpdateSlot for ' + id + ' Qed at [' + String(this.requestQueue.length-1) + ']');
+      this.logTime(D.REQ_Q, 'requestUpdateSlot for ' + id + ' Qed at [' + String(this.requestQueue.length-1) + ']');
     }
   }
 
@@ -110,7 +134,7 @@ export class DooyaHomebridgePlatform implements DynamicPlatformPlugin {
   requestGrant(tuple) {
     this.requestSetTimeout(); // Set a new timeout
     tuple[1](); // Callback to inform caller that slot is available
-    this.logTime('requestGrant for ' + tuple[0] + ' remaining in the queue ' + this.requestQueue.length);
+    this.logTime(D.REQ_Q, 'requestGrant for ' + tuple[0] + ' remaining in the queue ' + this.requestQueue.length);
   }
 
   requestSetTimeout() {
@@ -134,38 +158,41 @@ export class DooyaHomebridgePlatform implements DynamicPlatformPlugin {
   queueToXmitter(cmd: string, callback: QXmitCallback, channel: number) {
     const tuple = [cmd, callback, channel];
 
-    if (this.xmitQueue === undefined) {
-      this.xmitQueue = [];
-      this.xmitAvailable = true;
-    }
     if (this.xmitAvailable) {
       this.xmit(tuple);
     } else {
       this.xmitQueue.push(tuple);
-      this.logTime('Ch ' + tuple[2] + '  Qed[' + (this.xmitQueue.length-1) + ']');
+      this.logTime(D.XMIT_Q, 'Ch ' + tuple[2] + '  Qed[' + (this.xmitQueue.length-1) + ']');
     }
   }
 
   xmit(tuple) {
+    this.xmitAvailable = false;
+    this.xmitTimeoutObject = setTimeout(this.xmitTimeout.bind(this), this.xmitWait); 
     const cmd = String(tuple[0]);
-    this.xmitSetTimeout();
     this.arduinoPort.write(cmd + '\n');
     tuple[1](); // Callback to inform caller that command has been sent
-    this.logTime('Ch ' + tuple[2] + '  xmit ' + cmd);
-  }
-
-  xmitSetTimeout() {
-    setTimeout(this.xmitTimeout.bind(this), this.xmitWait); 
-    this.xmitAvailable = false;
+    this.logTime(D.XMIT_Q, 'Ch ' + tuple[2] + '  xmit ' + cmd);
   }
 
   xmitTimeout() {
-    this.logTime('xmitTimeout');
+    this.xmitTimeoutObject = undefined;
+    this.logTime(D.XMIT_Q, 'xmitTimeout');
     if (this.xmitQueue.length > 0) {
       const tuple = this.xmitQueue.shift();
       this.xmit(tuple);
     } else {
       this.xmitAvailable = true;
+    }
+  }
+
+  arduinoPortRead(line: string) {
+    this.logTime(D.XMITTER, '|----transmitter----| ' + line);
+    if (line.includes('!!READY!!')) {
+      if (this.xmitTimeoutObject !== undefined) {
+        clearTimeout(this.xmitTimeoutObject);
+      }
+      this.xmitTimeout();
     }
   }
 
@@ -261,8 +288,10 @@ export class DooyaHomebridgePlatform implements DynamicPlatformPlugin {
     }
   }
 
-  logTime(s: string) {
-    this.log.info(String(this.now()) + ': ' + s);
+  logTime(d: D, s: string) {
+    if (this.debug(d)) {
+      this.log.info(this.now().toFixed(6) + ': ' + s);
+    }
   }
 
   now(): number {
@@ -275,5 +304,12 @@ export class DooyaHomebridgePlatform implements DynamicPlatformPlugin {
     } else {
       return (getTime - this.nowBase) / 1e6;
     }
+  }
+
+  debug(d: D): boolean {
+    if (d< 0 || this.debugFlags & (1 << d)) {
+      return true;
+    }
+    return false;
   }
 }

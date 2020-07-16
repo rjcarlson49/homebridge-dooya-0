@@ -2,6 +2,14 @@ import { Service, PlatformAccessory, CharacteristicValue, CharacteristicSetCallb
 
 import { DooyaHomebridgePlatform } from './platform';
 
+enum D {
+  ANY = -1,
+  REQ_Q = 0, 
+  XMIT_Q = 1,
+  XMITTER = 2,
+  OTHER = 3,   
+}
+
 enum PosState {
   Decreasing = 0, // Opening
   Increasing = 1, // Closing
@@ -103,9 +111,9 @@ export class DooyaAccessory {
       this.swServiceOpen = new this.platform.Service.Switch(this.displayName + ' Open', 'Open');
       if (this.swServiceOpen) {
         this.swServiceOpen = this.accessory.addService(this.swServiceOpen);
-        this.logCh('New Open Switch Service');
+        this.logCh(D.ANY, 'New Open Switch Service');
       } else {
-        this.logCh('New Open Switch Service -- Failed!');
+        this.logCh(D.ANY, 'New Open Switch Service -- Failed!');
       }
     } 
     this.swServiceClose = <Service>this.accessory.getServiceById(this.platform.Service.Switch, 'Close');
@@ -113,9 +121,9 @@ export class DooyaAccessory {
       this.swServiceClose = new this.platform.Service.Switch(this.displayName + ' Close', 'Close');
       if (this.swServiceClose) {
         this.swServiceClose = this.accessory.addService(this.swServiceClose);
-        this.logCh('New Close Switch Service');
+        this.logCh(D.ANY, 'New Close Switch Service');
       } else {
-        this.logCh('New Close Switch Service -- Failed!');
+        this.logCh(D.ANY, 'New Close Switch Service -- Failed!');
       }
     } 
     
@@ -203,12 +211,12 @@ export class DooyaAccessory {
     } else {
       this.stopMoving();
     }
-    this.logCh('setSwitchOpen ' + this.swOpenOn);
+    this.logTimeCh(D.ANY, 'setSwitchOpen ' + this.swOpenOn);
     callback(null);
   }
 
   getSwitchOpen(callback: CharacteristicGetCallback) {
-    this.logCh('getSwitchOpen ' + this.swOpenOn);
+    this.logTimeCh(D.OTHER, 'getSwitchOpen ' + this.swOpenOn);
     callback(null, this.swOpenOn);
   }
 
@@ -225,18 +233,18 @@ export class DooyaAccessory {
     } else {
       this.stopMoving();
     }
-    this.logCh('setSwitchClose ' + this.swCloseOn);
+    this.logTimeCh(D.ANY, 'setSwitchClose ' + this.swCloseOn);
     callback(null);
   }
 
   getSwitchClose(callback: CharacteristicGetCallback) {
-    this.logCh('getSwitchClose ' + this.swCloseOn);
+    this.logTimeCh(D.OTHER, 'getSwitchClose ' + this.swCloseOn);
     callback(null, this.swCloseOn);
   }
 
   getCurrentPos(callback: CharacteristicGetCallback) {
 
-    this.logCh('Get Characteristic CurrentPos: ' + this.currentPosition);
+    this.logTimeCh(D.OTHER, 'Get Characteristic CurrentPos: ' + this.currentPosition);
     // you must call the callback function
     // the first argument should be null if there were no errors
     // the second argument should be the value to return
@@ -246,7 +254,7 @@ export class DooyaAccessory {
   getTargetPos(callback: CharacteristicGetCallback) {
 
     // implement your own code to check if the device is on
-    this.logCh('Get Characteristic TargetPos: ' + this.targetPosition);
+    this.logTimeCh(D.OTHER, 'Get Characteristic TargetPos: ' + this.targetPosition);
 
     // you must call the callback function
     // the first argument should be null if there were no errors
@@ -257,7 +265,7 @@ export class DooyaAccessory {
   getPosState(callback: CharacteristicGetCallback) {
 
     // implement your own code to check if the device is on
-    this.logCh('Get Characteristic PositionState: ' + this.positionState);
+    this.logTimeCh(D.OTHER, 'Get Characteristic PositionState: ' + this.positionState);
 
     // you must call the callback function
     // the first argument should be null if there were no errors
@@ -278,7 +286,7 @@ export class DooyaAccessory {
     // Go ahead and set, will not be acted upon until debounce is complete
     this.updateTarget(value as number, true);
 
-    this.logCh('Set Target on ' + this.displayName + 
+    this.logTimeCh(D.ANY, 'Set Target on ' + this.displayName + 
                ' To ' + value + 
                ' in ' + this.debounce + 
                'ms');
@@ -377,7 +385,7 @@ export class DooyaAccessory {
     }
     this.updateTarget(this.currentPosition, false);
     this.updateCurrent();
-    this.logCh('updateGroupTarget: ' + this.targetPosition + '  current: ' + this.currentPosition);
+    this.logTimeCh(D.OTHER, 'updateGroupTarget: ' + this.targetPosition + '  current: ' + this.currentPosition);
   }
 
   areNonGroupShadesStopped(): boolean {
@@ -397,7 +405,7 @@ export class DooyaAccessory {
     if (!this.enabled) {
       return;
     }
-    this.logCh('setGroupTarget ' + value + ' on ' + this.displayName);
+    this.logTimeCh(D.ANY, 'setGroupTarget ' + value + ' on ' + this.displayName);
     if (value < 0) {
       value = 0;
     } else if (value > 100) {
@@ -408,7 +416,7 @@ export class DooyaAccessory {
     
     if (this.groupCode) {
       // Can't really happen
-      this.logCh('Error - setGroupTarget called on a Group channel');
+      this.logTimeCh(D.ANY, 'Error - setGroupTarget called on a Group channel');
     } else {
       this.updateTarget(value, false);
       this.silent = silent;
@@ -417,7 +425,7 @@ export class DooyaAccessory {
   }
   
   executeSetTarget() {
-    this.logCh('executeSetTarget: ' + this.targetPosition);
+    this.logTimeCh(D.OTHER, 'executeSetTarget: ' + this.targetPosition);
     if (this.targetPosition === 0) {
       // Closing
       this.updateState(PosState.Decreasing);
@@ -457,7 +465,7 @@ export class DooyaAccessory {
         this.platform.queueToXmitter(this.closeCmdString, this.startMoving.bind(this), this.channelNum);
       }
     }
-    this.logShadeState('executeSetTarget');
+    this.logShadeState(D.OTHER, 'executeSetTarget');
   }
 
   tick() {
@@ -485,10 +493,10 @@ export class DooyaAccessory {
       this.currentPosition += 1;
     }
     if (this.currentPosition < 0) {
-      this.logCh('currentPosition Error: ' + this.currentPosition);
+      this.logTimeCh(D.ANY, 'currentPosition Error: ' + this.currentPosition);
       this.currentPosition = 0;
     } else if (this.currentPosition > 100) {
-      this.logCh('currentPosition Error: ' + this.currentPosition);
+      this.logTimeCh(D.ANY, 'currentPosition Error: ' + this.currentPosition);
       this.currentPosition = 100;
     }
     
@@ -501,7 +509,7 @@ export class DooyaAccessory {
   }
 
   showTick() {
-    this.logTimeCh('Tick State (' + 
+    this.logTimeCh(D.OTHER, 'Tick State (' + 
                    this.currentPosition + ', ' + 
                    this.targetPosition + ', ' + 
                    this.positionState + 
@@ -513,18 +521,18 @@ export class DooyaAccessory {
       this.positionState = newSetting;
       const s = 'Ch[' + this.channelNum + '] updateState ' + this.positionState;
       this.platform.requestUpdateSlot(s, this.updateStateCB.bind(this));
-      this.logTimeCh('Update state... ' + this.positionState);
+      this.logTimeCh(D.OTHER, 'Update state... ' + this.positionState);
     }
   }
 
   updateStateCB() {
-    this.logTimeCh('Update state: ' + this.positionState);
+    this.logTimeCh(D.OTHER, 'Update state: ' + this.positionState);
     this.service.getCharacteristic(this.platform.Characteristic.PositionState).updateValue(this.positionState);
   }
   
   updateCurrent() {
     if (this.positionState === PosState.Stopped) {
-      this.logTimeCh('Update Current... ' + this.currentPosition);
+      this.logTimeCh(D.OTHER, 'Update Current... ' + this.currentPosition);
     }
     const s = 'Ch[' + this.channelNum + '] updateCurrent ' + this.currentPosition;
     this.platform.requestUpdateSlot(s, this.updateCurrentCB.bind(this));
@@ -532,7 +540,7 @@ export class DooyaAccessory {
 
   updateCurrentCB() {
     if (this.positionState === PosState.Stopped) {
-      this.logTimeCh('Update current: ' + this.currentPosition);
+      this.logTimeCh(D.OTHER, 'Update current: ' + this.currentPosition);
     }
     this.service.getCharacteristic(this.platform.Characteristic.CurrentPosition).updateValue(this.currentPosition);
   }
@@ -542,7 +550,7 @@ export class DooyaAccessory {
       this.targetPosition = newSetting;
       this.accessory.context.tP = this.targetPosition; // Preserve across restarts
       if (!localOnly) {
-        this.logTimeCh('Update Target... ' + this.targetPosition);
+        this.logTimeCh(D.OTHER, 'Update Target... ' + this.targetPosition);
         const s = 'Ch[' + this.channelNum + '] updateTarget ' + this.targetPosition;
         this.platform.requestUpdateSlot(s, this.updateTargetCB.bind(this));
       }
@@ -550,7 +558,7 @@ export class DooyaAccessory {
   }
 
   updateTargetCB() {
-    this.logTimeCh('Update target: ' + this.targetPosition);
+    this.logTimeCh(D.OTHER, 'Update target: ' + this.targetPosition);
     this.service.getCharacteristic(this.platform.Characteristic.TargetPosition).updateValue(this.targetPosition);
   }
 
@@ -560,7 +568,7 @@ export class DooyaAccessory {
   }
 
   updateSwitchOpenCB() {
-    this.logTimeCh('Update Open: ' + this.swOpenOn);
+    this.logTimeCh(D.OTHER, 'Update Open: ' + this.swOpenOn);
     this.swServiceOpen.getCharacteristic(this.platform.Characteristic.On).updateValue(this.swOpenOn);
   }
 
@@ -570,12 +578,12 @@ export class DooyaAccessory {
   }
 
   updateSwitchCloseCB() {
-    this.logTimeCh('Update Close: ' + this.swCloseOn);
+    this.logTimeCh(D.OTHER, 'Update Close: ' + this.swCloseOn);
     this.swServiceClose.getCharacteristic(this.platform.Characteristic.On).updateValue(this.swCloseOn);
   }
 
   startMoving() {
-    //this.logCh('startMoving ', this.tickTime);
+    //this.logTimeCh('startMoving ', this.tickTime);
     this.currentPosition = Math.floor(this.currentPosition); // Make certain an integer omparison 
     this.targetPosition = Math.floor(this.targetPosition);   // does not fail because of a fraction
     if (this.tickerObject !== null) {
@@ -587,7 +595,7 @@ export class DooyaAccessory {
   }
 
   stopMoving() {
-    this.logTimeCh('Stopped');
+    this.logTimeCh(D.ANY, 'Stopped');
     //this.platform.log.info('stopMoving');
     this.updateTarget(this.currentPosition, false);
     this.updateState(PosState.Stopped);
@@ -688,43 +696,53 @@ export class DooyaAccessory {
   }
 
   logState() {
-    this.logCh('Dooya shade state: (' + this.currentPosition +
+    this.logCh(D.ANY, 'Dooya shade state: (' + this.currentPosition +
                            ', ' + this.targetPosition +
                            ', ' + this.positionState + ')');
     
-    this.log('Dooya shade: (' + this.displayName +
+    this.log(D.ANY, 'Dooya shade: (' + this.displayName +
                            ', ' + this.id +
                            ', ' + this.channelNum +
                            ', ' + this.channelCode +
                            ', ' + this.maxTime +
                            ', ' + this.groupCode + ')');
  
-    this.log('Dooya platform: (' + this.fixedCode +
+    this.log(D.ANY, 'Dooya platform: (' + this.fixedCode +
                            ', ' + this.openCode +
                            ', ' + this.closeCode +
                            ', ' + this.stopCode + ')');
-    this.log('Dooya Open Channel:  ' + this.channelNum + ' (' + this.openCmdString + ')');
-    this.log('Dooya Close Channel: ' + this.channelNum + ' (' + this.closeCmdString + ')');
-    this.log('Dooya Stop Channel:  ' + this.channelNum + ' (' + this.stopCmdString + ')');
+    this.log(D.ANY, 'Dooya Open Channel:  ' + this.channelNum + ' (' + this.openCmdString + ')');
+    this.log(D.ANY, 'Dooya Close Channel: ' + this.channelNum + ' (' + this.closeCmdString + ')');
+    this.log(D.ANY, 'Dooya Stop Channel:  ' + this.channelNum + ' (' + this.stopCmdString + ')');
   }
 
-  logTimeCh(s: string) {
-    this.platform.log.info(String(this.platform.now()) + ': Ch ' + this.channelNum + ': ' + s);
+  logTimeCh(d: D, s: string) {
+    if (this.debug(d)) {
+      this.platform.log.info(this.platform.now().toFixed(6) + ': Ch ' + this.channelNum.toFixed(0) + ': ' + s);
+    }
   }
 
-  logCh(s: string) {
-    this.platform.log.info('Ch ' + this.channelNum + ': ' + s);
+  logCh(d: D, s: string) {
+    if (this.debug(d)) {
+      this.platform.log.info('Ch ' + this.channelNum.toFixed(0) + ': ' + s);
+    }
   }
 
-  log(s :string) {
-    this.platform.log.info('Ch ' + this.channelNum + ': ' + s);
+  log(d: D, s :string) {
+    if (this.debug(d)) {
+      this.platform.log.info('Ch ' + this.channelNum.toFixed(0) + ': ' + s);
+    }
   }
 
-  logShadeState(n: string) {
-    this.logCh(n + this.displayName + ' (' + 
+  logShadeState(d: D, n: string) {
+    this.logTimeCh(d, n + this.displayName + ' (' + 
     this.currentPosition + ', ' + 
     this.targetPosition + ', ' + 
     this.positionState + ') silent: ' +
     this.silent);
+  }
+
+  debug(d: D): boolean {
+    return this.platform.debug(d);
   }
 }
