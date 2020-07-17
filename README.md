@@ -104,7 +104,7 @@ Select Plugins/Dooya Shade Controller/Settings on the UI. This will take you to 
 ## Platform
 
 Name | Description
----------------|-------------------------|
+---------------|:-------------------------|
 Name|Your name for the plugin.
 Serial Port | The port name of the USB port to which your Arduino transmitter is connected.
 
@@ -113,7 +113,7 @@ Serial Port | The port name of the USB port to which your Arduino transmitter is
 Each command is 10 hex digits or 40 bits, consisting of a fixed part, a channel code and a command code. The plugin does not care how long each of these is, but in the DC1602, the fixed part is 7 hex digits, the channel code is 1 hex digit and the command is 2 hex digits.
 
 Name | Description
----------------|-------------------------|
+---------------|:-------------------------|
 Fixed Code | Fixed part, in hex. Usually 7 digits.
 Open Code | Hex code for 'Open'. It can be followed by '*' and a decimal digit indicating number of times to transmit this row. Mutliple entries are allowed because some operations like open required more than one 40 bit row to be sent.
 Close Code | Hex code for 'Close'. It can be followed by '*' and a decimal digit indicating number of times to transmit this row. Mutliple entries are allowed because some operations like open required more than one 40 bit row to be sent.
@@ -122,7 +122,7 @@ Stop Code | Hex code for 'Stop'. It can be followed by '*' and a decimal digit i
 ## Shades/Channels
 
 Name | Description
----------------|-------------------------|
+---------------|:-------------------------|
 Enabled | Enable/Disable - When disabled, individual shades don't operate. The groupCode will be treated differently. When disabled, all group commands will be forwarded to individual shades.
 Channel 0 - All shades | Channel 0 is likely to be a channel received by all shades. Check the groupCode box for the channel that controls all shades.
 displayName | The name you call the shade in Homekit/Siri. Give it a name you can pronounce for Siri.
@@ -135,7 +135,7 @@ maxTime | The time in seconds that it takes this shade to go from fully open to 
 The plugin cannot know when a shade operation is complete, so it relies on keeping time. There are also things in the system that must be spaced out. These timing settings help make everything work smootly.
 
 Name | Description
----------------|-------------------------|
+---------------|:-------------------------|
 debounce | Homekit will often send multiple commands to the plugin, for example while a slider is being adjusted. The plugin will wait this number of ms before executing a command in case another superceding command arrives. The default of 500 (.5 s) works well.
 xmitWait | The code sets this as a timeout when it transmits remote codes. The arduino code responds with !!READY!! when it is ready for another tranmission, but in case this is missed, the timeout will recover. 2000 ms is the default (2 s).
 updateWait | The plugin sends many updates to Homekit during an operation. It will wait this number of ms between updates to avoid overwhelming the channel. 50 ms is the default.
