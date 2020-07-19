@@ -663,7 +663,7 @@ export class DooyaAccessory {
   }
 
   dummyCallback() {
-
+    return;
   }
 
   /*send(s: string) {

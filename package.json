@@ -1,10 +1,12 @@
 {
-  "private": true,
+  "private": false,
   "displayName": "Dooya Shade Controller",
-  "name": "homebridge-dooya",
+  "name": "homebridge-dooya-0",
   "version": "1.0.0",
   "description": "Homebridge controller for shades using Dooya motors",
-  "license": "GPL-3.0-or-later",
+  "license": "MIT",
+  "homepage": "https://github.com/rjcarlson49/homebridge-dooya-0#readme",
+  "author": "Bob Carlson <bob@rjcarlson.com>",
   "repository": {
     "type": "git",
     "url": "git://github.com/rjcarlson49/homebridge-dooya-0.git"
@@ -39,7 +41,5 @@
     "rimraf": "^3.0.2",
     "ts-node": "^8.10.2",
     "typescript": "^3.9.5"
-  },
-  "homepage": "https://github.com/rjcarlson49/homebridge-dooya-0#readme",
-  "author": "Bob Carlson"
+  }
 }
