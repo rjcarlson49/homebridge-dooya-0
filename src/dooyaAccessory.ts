@@ -7,7 +7,8 @@ enum D {
   REQ_Q = 0, 
   XMIT_Q = 1,
   XMITTER = 2,
-  OTHER = 3,   
+  OTHER = 3,
+  TICK = 4,   
 }
 
 enum PosState {
@@ -509,7 +510,7 @@ export class DooyaAccessory {
   }
 
   showTick() {
-    this.logTimeCh(D.OTHER, 'Tick State (' + 
+    this.logTimeCh(D.TICK, 'Tick State (' + 
                    this.currentPosition + ', ' + 
                    this.targetPosition + ', ' + 
                    this.positionState + 

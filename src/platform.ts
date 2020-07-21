@@ -9,6 +9,7 @@ enum D {
   XMIT_Q = 1,
   XMITTER = 2,
   OTHER = 3,   
+  TICK = 4,   
 }
 
 interface QXmitCallback {():void;}
