@@ -14,7 +14,8 @@ enum D {
 enum PosState {
   Decreasing = 0, // Opening
   Increasing = 1, // Closing
-  Stopped = 2     // Stopped
+  Stopped = 2,    // Stopped
+  Calibrating = 3 // Testing the timing mechanism
 }
 /**
  * Platform Accessory
@@ -70,6 +71,10 @@ export class DooyaAccessory {
   private tickTime: number;    // # of ms that shade takes to move 1%
   private tickerObject;
 
+  private calibrationCount: number;
+  private calibrationFactor = 0;
+  private calibrationStartTime = 1;
+
   constructor(
     private readonly platform: DooyaHomebridgePlatform,
     private readonly accessory: PlatformAccessory) {
@@ -91,9 +96,10 @@ export class DooyaAccessory {
       this.platform.setGroupObject(this);
     } 
     this.maxTime = this.accessory.context.device.maxTime; // In seconds
-    this.tickTime = this.maxTime * 10 - this.tickFudge; // Number of ms in 1% of maxTime
+    //this.tickTime = this.maxTime * 10 - this.tickFudge; // Number of ms in 1% of maxTime
+    this.tickTime = this.maxTime * 10; // Number of ms in 1% of maxTime
     this.silent = false;
-    
+
     this.createCmdStrings();
   
     // set accessory information
@@ -167,6 +173,8 @@ export class DooyaAccessory {
       .on('set', this.setSwitchClose.bind(this))       // SET - bind to the 'setSwitchClose` method below
       .on('get', this.getSwitchClose.bind(this));       // SET - bind to the 'getSwitchClose` method below
 
+    this.startCalibration();
+
     // EXAMPLE ONLY
     // Example showing how to update the state of a Characteristic asynchronously instead
     // of using the `on('get')` handlers.
@@ -190,7 +198,7 @@ export class DooyaAccessory {
    * Handle the "GET" requests from HomeKit
    * These are sent when HomeKit wants to know the current state of the accessory, for example, checking if a Light bulb is on.
    * 
-   * GET requests should return as fast as possbile. A long delay here will result in
+   * GET requests should return as fast as possible. A long delay here will result in
    * HomeKit being unresponsive and a bad user experience in general.
    * 
    * If your device takes time to respond you should update the status of your device
@@ -471,7 +479,12 @@ export class DooyaAccessory {
 
   tick() {
     if (this.silent) {
-      if (this.groupCode) {
+      if (this.positionState === PosState.Calibrating) {
+        this.calibrationCount -= 1;
+        if (this.calibrationCount <= 0) {
+          this.stopCalibration();
+        }
+      } else if (this.groupCode) {
         if (this.areNonGroupShadesStopped()) {
           // We have to stop too
           this.positionState = PosState.Stopped;
@@ -508,81 +521,29 @@ export class DooyaAccessory {
       this.stopMoving();
     }
   }
+  
+  startCalibration() {
+    this.calibrationCount = 100;
+    this.silent = true;
+    this.tickTime = this.maxTime * 10; // Number of ms in 1% of maxTime
+    this.calibrationStartTime = this.platform.now();
 
-  showTick() {
-    this.logTimeCh(D.TICK, 'Tick State (' + 
-                   this.currentPosition + ', ' + 
-                   this.targetPosition + ', ' + 
-                   this.positionState + 
-                   ') tickTime ' + this.tickTime);
+    this.showTick();
+    this.tickerObject = setInterval(this.tick.bind(this), this.tickTime);
   }
 
-  updateState(newSetting: PosState) {
-    if (newSetting !== this.positionState) {
-      this.positionState = newSetting;
-      const s = 'Ch[' + this.channelNum + '] updateState ' + this.positionState;
-      this.platform.requestUpdateSlot(s, this.updateStateCB.bind(this));
-      this.logTimeCh(D.OTHER, 'Update state... ' + this.positionState);
+  stopCalibration() {
+    this.calibrationCount = 0;
+    this.silent = false;
+    this.calibrationFactor = this.maxTime / (this.platform.now() - this.calibrationStartTime);
+    this.tickTime = this.maxTime * 10 * this.calibrationFactor;
+    this.showTick();
+    if (this.tickerObject !== null) {
+      clearInterval(this.tickerObject);
+      this.tickerObject = null;
     }
-  }
-
-  updateStateCB() {
-    this.logTimeCh(D.OTHER, 'Update state: ' + this.positionState);
-    this.service.getCharacteristic(this.platform.Characteristic.PositionState).updateValue(this.positionState);
   }
   
-  updateCurrent() {
-    if (this.positionState === PosState.Stopped) {
-      this.logTimeCh(D.OTHER, 'Update Current... ' + this.currentPosition);
-    }
-    const s = 'Ch[' + this.channelNum + '] updateCurrent ' + this.currentPosition;
-    this.platform.requestUpdateSlot(s, this.updateCurrentCB.bind(this));
-  }
-
-  updateCurrentCB() {
-    if (this.positionState === PosState.Stopped) {
-      this.logTimeCh(D.OTHER, 'Update current: ' + this.currentPosition);
-    }
-    this.service.getCharacteristic(this.platform.Characteristic.CurrentPosition).updateValue(this.currentPosition);
-  }
-
-  updateTarget(newSetting: number, localOnly: boolean) {
-    if (newSetting !== this.targetPosition) {
-      this.targetPosition = newSetting;
-      this.accessory.context.tP = this.targetPosition; // Preserve across restarts
-      if (!localOnly) {
-        this.logTimeCh(D.OTHER, 'Update Target... ' + this.targetPosition);
-        const s = 'Ch[' + this.channelNum + '] updateTarget ' + this.targetPosition;
-        this.platform.requestUpdateSlot(s, this.updateTargetCB.bind(this));
-      }
-    }
-  }
-
-  updateTargetCB() {
-    this.logTimeCh(D.OTHER, 'Update target: ' + this.targetPosition);
-    this.service.getCharacteristic(this.platform.Characteristic.TargetPosition).updateValue(this.targetPosition);
-  }
-
-  updateSwitchOpen() {
-    const s = 'Ch[' + this.channelNum + '] updateSwitchOpen ' + this.swOpenOn;
-    this.platform.requestUpdateSlot(s, this.updateSwitchOpenCB.bind(this));
-  }
-
-  updateSwitchOpenCB() {
-    this.logTimeCh(D.OTHER, 'Update Open: ' + this.swOpenOn);
-    this.swServiceOpen.getCharacteristic(this.platform.Characteristic.On).updateValue(this.swOpenOn);
-  }
-
-  updateSwitchClose() {
-    const s = 'Ch[' + this.channelNum + '] updateSwitchClose ' + this.swCloseOn;
-    this.platform.requestUpdateSlot(s, this.updateSwitchCloseCB.bind(this));
-  }
-
-  updateSwitchCloseCB() {
-    this.logTimeCh(D.OTHER, 'Update Close: ' + this.swCloseOn);
-    this.swServiceClose.getCharacteristic(this.platform.Characteristic.On).updateValue(this.swCloseOn);
-  }
-
   startMoving() {
     //this.logTimeCh('startMoving ', this.tickTime);
     this.currentPosition = Math.floor(this.currentPosition); // Make certain an integer omparison 
@@ -661,6 +622,83 @@ export class DooyaAccessory {
         this.updateSwitchOpen();
       }
     }
+  }
+
+  showTick() {
+    this.logTimeCh(D.TICK, 'Tick State (' + 
+                   this.currentPosition + ', ' + 
+                   this.targetPosition + ', ' + 
+                   this.positionState + ') Tick Timing (' + 
+                   this.maxTime + ', ' + 
+                   this.tickTime + ', ' + 
+                   this.calibrationFactor + ')' + 
+                   );
+  }
+
+  updateState(newSetting: PosState) {
+    if (newSetting !== this.positionState) {
+      this.positionState = newSetting;
+      const s = 'Ch[' + this.channelNum + '] updateState ' + this.positionState;
+      this.platform.requestUpdateSlot(s, this.updateStateCB.bind(this));
+      this.logTimeCh(D.OTHER, 'Update state... ' + this.positionState);
+    }
+  }
+
+  updateStateCB() {
+    this.logTimeCh(D.OTHER, 'Update state: ' + this.positionState);
+    this.service.getCharacteristic(this.platform.Characteristic.PositionState).updateValue(this.positionState);
+  }
+  
+  updateCurrent() {
+    if (this.positionState === PosState.Stopped) {
+      this.logTimeCh(D.OTHER, 'Update Current... ' + this.currentPosition);
+    }
+    const s = 'Ch[' + this.channelNum + '] updateCurrent ' + this.currentPosition;
+    this.platform.requestUpdateSlot(s, this.updateCurrentCB.bind(this));
+  }
+
+  updateCurrentCB() {
+    if (this.positionState === PosState.Stopped) {
+      this.logTimeCh(D.OTHER, 'Update current: ' + this.currentPosition);
+    }
+    this.service.getCharacteristic(this.platform.Characteristic.CurrentPosition).updateValue(this.currentPosition);
+  }
+
+  updateTarget(newSetting: number, localOnly: boolean) {
+    if (newSetting !== this.targetPosition) {
+      this.targetPosition = newSetting;
+      this.accessory.context.tP = this.targetPosition; // Preserve across restarts
+      if (!localOnly) {
+        this.logTimeCh(D.OTHER, 'Update Target... ' + this.targetPosition);
+        const s = 'Ch[' + this.channelNum + '] updateTarget ' + this.targetPosition;
+        this.platform.requestUpdateSlot(s, this.updateTargetCB.bind(this));
+      }
+    }
+  }
+
+  updateTargetCB() {
+    this.logTimeCh(D.OTHER, 'Update target: ' + this.targetPosition);
+    this.service.getCharacteristic(this.platform.Characteristic.TargetPosition).updateValue(this.targetPosition);
+  }
+
+  updateSwitchOpen() {
+    const s = 'Ch[' + this.channelNum + '] updateSwitchOpen ' + this.swOpenOn;
+    this.platform.requestUpdateSlot(s, this.updateSwitchOpenCB.bind(this));
+  }
+
+  updateSwitchOpenCB() {
+    this.logTimeCh(D.OTHER, 'Update Open: ' + this.swOpenOn);
+    this.swServiceOpen.getCharacteristic(this.platform.Characteristic.On).updateValue(this.swOpenOn);
+  }
+
+  updateSwitchClose() {
+    const s = 'Ch[' + this.channelNum + '] updateSwitchClose ' + this.swCloseOn;
+    this.platform.requestUpdateSlot(s, this.updateSwitchCloseCB.bind(this));
+  }
+
+  updateSwitchCloseCB() {
+    this.logTimeCh(D.OTHER, 'Update Close: ' + this.swCloseOn);
+    this.swServiceClose.getCharacteristic(this.platform.Characteristic.On).updateValue(this.swCloseOn);
   }
 
   dummyCallback() {

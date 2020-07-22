@@ -294,7 +294,11 @@ export class DooyaHomebridgePlatform implements DynamicPlatformPlugin {
       this.log.info(this.now().toFixed(6) + ': ' + s);
     }
   }
-
+  
+  /*
+    Returns number of microseconds since the first call.
+    Thus the first call always returns 0.
+  */
   now(): number {
     const hr = process.hrtime();
     const getTime = Math.floor(hr[0] * 1e6 + hr[1] / 1e3);
