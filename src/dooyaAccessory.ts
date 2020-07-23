@@ -4,11 +4,11 @@ import { DooyaHomebridgePlatform } from './platform';
 
 enum D {
   ANY = -1,
-  REQ_Q = 0, 
-  XMIT_Q = 1,
-  XMITTER = 2,
-  OTHER = 3,
-  TICK = 4,   
+  REQ_Q = 0,   // 1
+  XMIT_Q = 1,  // 2
+  XMITTER = 2, // 4
+  OTHER = 3,   // 8
+  TICK = 4,    // 16
 }
 
 enum PosState {
@@ -71,9 +71,9 @@ export class DooyaAccessory {
   private tickTime: number;    // # of ms that shade takes to move 1%
   private tickerObject;
 
-  private calibrationCount: number;
-  private calibrationFactor = 0;
-  private calibrationStartTime = 1;
+  private calibrationCount = 0;
+  private calibrationFactor = 1;
+  private calibrationStartTime = 0;
 
   constructor(
     private readonly platform: DooyaHomebridgePlatform,
@@ -484,6 +484,7 @@ export class DooyaAccessory {
         if (this.calibrationCount <= 0) {
           this.stopCalibration();
         }
+        return;
       } else if (this.groupCode) {
         if (this.areNonGroupShadesStopped()) {
           // We have to stop too
@@ -523,20 +524,27 @@ export class DooyaAccessory {
   }
   
   startCalibration() {
+    this.positionState = PosState.Calibrating;
     this.calibrationCount = 100;
     this.silent = true;
     this.tickTime = this.maxTime * 10; // Number of ms in 1% of maxTime
     this.calibrationStartTime = this.platform.now();
 
+    this.logTimeCh(D.TICK, 'startCalibration');
     this.showTick();
     this.tickerObject = setInterval(this.tick.bind(this), this.tickTime);
   }
 
   stopCalibration() {
+    this.positionState = PosState.Stopped;
     this.calibrationCount = 0;
     this.silent = false;
     this.calibrationFactor = this.maxTime / (this.platform.now() - this.calibrationStartTime);
+    this.calibrationFactor = this.sigDigits(this.calibrationFactor, 3);
     this.tickTime = this.maxTime * 10 * this.calibrationFactor;
+    this.tickTime = this.sigDigits(this.tickTime, 0);
+    
+    this.logTimeCh(D.TICK, 'stopCalibration');
     this.showTick();
     if (this.tickerObject !== null) {
       clearInterval(this.tickerObject);
@@ -546,7 +554,7 @@ export class DooyaAccessory {
   
   startMoving() {
     //this.logTimeCh('startMoving ', this.tickTime);
-    this.currentPosition = Math.floor(this.currentPosition); // Make certain an integer omparison 
+    this.currentPosition = Math.floor(this.currentPosition); // Make certain an integer comparison 
     this.targetPosition = Math.floor(this.targetPosition);   // does not fail because of a fraction
     if (this.tickerObject !== null) {
       clearInterval(this.tickerObject);
@@ -557,7 +565,7 @@ export class DooyaAccessory {
   }
 
   stopMoving() {
-    this.logTimeCh(D.ANY, 'Stopped');
+    this.logTimeCh(D.ANY, 'stopMoving');
     //this.platform.log.info('stopMoving');
     this.updateTarget(this.currentPosition, false);
     this.updateState(PosState.Stopped);
@@ -625,14 +633,15 @@ export class DooyaAccessory {
   }
 
   showTick() {
-    this.logTimeCh(D.TICK, 'Tick State (' + 
+    this.logTimeCh(D.TICK, 
+      'Tick State (' + 
                    this.currentPosition + ', ' + 
                    this.targetPosition + ', ' + 
                    this.positionState + ') Tick Timing (' + 
                    this.maxTime + ', ' + 
                    this.tickTime + ', ' + 
-                   this.calibrationFactor + ')' + 
-                   );
+                   this.calibrationFactor + ')',
+    );
   }
 
   updateState(newSetting: PosState) {
@@ -783,5 +792,10 @@ export class DooyaAccessory {
 
   debug(d: D): boolean {
     return this.platform.debug(d);
+  }
+
+  sigDigits(x: number, d: number): number {
+    const raise = Math.pow(10, Math.floor(d));
+    return Math.round(x * raise) / raise;
   }
 }
