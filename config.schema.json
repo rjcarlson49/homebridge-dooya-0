@@ -63,13 +63,6 @@
         "required": true,
         "default": 20
       },
-      "tickFudge": {
-        "title": "Tick Process Overhead",
-        "description": "Should be about equal to the ms lost during each tick. Larger numbers reduce the run times.",
-        "type": "number",
-        "required": true,
-        "default": 60
-      },
       "enableTransmitterConfig": {
         "title": "Override configuration on Transmitter.",
         "description": "Override the default configuration on the Arduino Transmitter.",

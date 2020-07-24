@@ -14,8 +14,7 @@ enum D {
 enum PosState {
   Decreasing = 0, // Opening
   Increasing = 1, // Closing
-  Stopped = 2,    // Stopped
-  Calibrating = 3 // Testing the timing mechanism
+  Stopped = 2
 }
 /**
  * Platform Accessory
@@ -48,7 +47,9 @@ export class DooyaAccessory {
   private channelCode: string; // Comman separated HEX characters
   private groupCode: boolean;  // When true this channel/shade moves all shades in the group
   private maxTime: number;     // time to go from 0 to 100% or revers in secs
-  private tickFudge: number;   // Fudge factor to correct 'tick' timing. Typically this is around .8
+  private calibrateStartTime = 0; 
+  private calibrateStartPos = 0;
+
 
   // Common to the platform
   private fixedCode: string; // Comman separated HEX characters
@@ -71,10 +72,6 @@ export class DooyaAccessory {
   private tickTime: number;    // # of ms that shade takes to move 1%
   private tickerObject;
 
-  private calibrationCount = 0;
-  private calibrationFactor = 1;
-  private calibrationStartTime = 0;
-
   constructor(
     private readonly platform: DooyaHomebridgePlatform,
     private readonly accessory: PlatformAccessory) {
@@ -82,7 +79,6 @@ export class DooyaAccessory {
     this.displayName = this.accessory.context.device.displayName;
     this.enabled = this.accessory.context.device.enabled;
     this.debounce = this.platform.config.debounce;
-    this.tickFudge = this.platform.config.tickFudge;
     this.fixedCode = this.platform.config.fixedCode;
     this.openCode = this.platform.config.openCode;
     this.closeCode = this.platform.config.closeCode;
@@ -96,10 +92,9 @@ export class DooyaAccessory {
       this.platform.setGroupObject(this);
     } 
     this.maxTime = this.accessory.context.device.maxTime; // In seconds
-    //this.tickTime = this.maxTime * 10 - this.tickFudge; // Number of ms in 1% of maxTime
-    this.tickTime = this.maxTime * 10; // Number of ms in 1% of maxTime
+    this.tickTime = this.maxTime * 10; // Nominal setting, calibrator updates it.
     this.silent = false;
-
+    
     this.createCmdStrings();
   
     // set accessory information
@@ -172,8 +167,6 @@ export class DooyaAccessory {
     this.swServiceClose.getCharacteristic(this.platform.Characteristic.On)!
       .on('set', this.setSwitchClose.bind(this))       // SET - bind to the 'setSwitchClose` method below
       .on('get', this.getSwitchClose.bind(this));       // SET - bind to the 'getSwitchClose` method below
-
-    this.startCalibration();
 
     // EXAMPLE ONLY
     // Example showing how to update the state of a Characteristic asynchronously instead
@@ -479,13 +472,7 @@ export class DooyaAccessory {
 
   tick() {
     if (this.silent) {
-      if (this.positionState === PosState.Calibrating) {
-        this.calibrationCount -= 1;
-        if (this.calibrationCount <= 0) {
-          this.stopCalibration();
-        }
-        return;
-      } else if (this.groupCode) {
+      if (this.groupCode) {
         if (this.areNonGroupShadesStopped()) {
           // We have to stop too
           this.positionState = PosState.Stopped;
@@ -523,39 +510,13 @@ export class DooyaAccessory {
     }
   }
   
-  startCalibration() {
-    this.positionState = PosState.Calibrating;
-    this.calibrationCount = 100;
-    this.silent = true;
-    this.tickTime = this.maxTime * 10; // Number of ms in 1% of maxTime
-    this.calibrationStartTime = this.platform.now();
-
-    this.logTimeCh(D.TICK, 'startCalibration');
-    this.showTick();
-    this.tickerObject = setInterval(this.tick.bind(this), this.tickTime);
-  }
-
-  stopCalibration() {
-    this.positionState = PosState.Stopped;
-    this.calibrationCount = 0;
-    this.silent = false;
-    this.calibrationFactor = this.maxTime / (this.platform.now() - this.calibrationStartTime);
-    this.calibrationFactor = this.sigDigits(this.calibrationFactor, 3);
-    this.tickTime = this.maxTime * 10 * this.calibrationFactor;
-    this.tickTime = this.sigDigits(this.tickTime, 0);
-    
-    this.logTimeCh(D.TICK, 'stopCalibration');
-    this.showTick();
-    if (this.tickerObject !== null) {
-      clearInterval(this.tickerObject);
-      this.tickerObject = null;
-    }
-  }
-  
   startMoving() {
     //this.logTimeCh('startMoving ', this.tickTime);
     this.currentPosition = Math.floor(this.currentPosition); // Make certain an integer comparison 
     this.targetPosition = Math.floor(this.targetPosition);   // does not fail because of a fraction
+    this.calibrateStartPos = this.currentPosition; // Used by newTickTime
+    this.calibrateStartTime = this.platform.now(); // Used by newTickTime
+
     if (this.tickerObject !== null) {
       clearInterval(this.tickerObject);
     }
@@ -566,7 +527,7 @@ export class DooyaAccessory {
 
   stopMoving() {
     this.logTimeCh(D.ANY, 'stopMoving');
-    //this.platform.log.info('stopMoving');
+    this.tickTime = this.newTickTime(this.currentPosition, this.tickTime);
     this.updateTarget(this.currentPosition, false);
     this.updateState(PosState.Stopped);
     this.updateCurrent();
@@ -588,6 +549,14 @@ export class DooyaAccessory {
     this.adjustSwitches();
   }
 
+  newTickTime(pos: number, prevTickTime: number): number {
+    const expected = this.sigDigits((Math.abs(pos - this.calibrateStartPos) / 100) * this.maxTime, 2);
+    const actual = this.sigDigits((this.platform.now() - this.calibrateStartTime), 2); // Get seconds since reportStart
+    const result = this.sigDigits(expected / actual, 2);
+    this.logTimeCh(D.TICK, 'newTickTime ' + result + ' = ' + expected + '/' + actual + ' => ' + prevTickTime*result);
+    return this.sigDigits(prevTickTime * result, 0);
+  } // newTickTime
+  
   adjustSwitches() {
     if (this.silent) {
       // Switches stay off during silent running
@@ -639,8 +608,7 @@ export class DooyaAccessory {
                    this.targetPosition + ', ' + 
                    this.positionState + ') Tick Timing (' + 
                    this.maxTime + ', ' + 
-                   this.tickTime + ', ' + 
-                   this.calibrationFactor + ')',
+                   this.tickTime + ')',
     );
   }
 

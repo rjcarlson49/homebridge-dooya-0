@@ -294,9 +294,9 @@ export class DooyaHomebridgePlatform implements DynamicPlatformPlugin {
       this.log.info(this.now().toFixed(6) + ': ' + s);
     }
   }
-  
+
   /*
-    Returns number of microseconds since the first call.
+    Returns number of seconds since the first call.
     Thus the first call always returns 0.
   */
   now(): number {
