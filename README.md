@@ -40,7 +40,7 @@ that must be simulated.
 
 ## Installation
 
-Install from NPM here:
+Install from NPM here: [npm homebridge-dooya-0 ](https://www.npmjs.com/package/homebridge-dooya-0)
 
 It is also strongly recommended that you install [homebridge-config-ui-x](https://www.npmjs.com/package/homebridge-config-ui-x). This will give you a much easier way to control your Homebridge server, but also provide easy ways to configure this plugin. 
 
@@ -86,7 +86,6 @@ Select Plugins/Dooya Shade Controller/Settings on the UI. This will take you to 
         "debounce": 500,
         "xmitWait": 2000,
         "updateWait": 50,
-        "tickFudge": 53,
         "enableTransmitterConfig": false,
         "zeroOn": 700,
         "zeroOff": 340,
@@ -139,7 +138,6 @@ Name | Description
 debounce | Homekit will often send multiple commands to the plugin, for example while a slider is being adjusted. The plugin will wait this number of ms before executing a command in case another superceding command arrives. The default of 500 (.5 s) works well.
 xmitWait | The code sets this as a timeout when it transmits remote codes. The arduino code responds with !!READY!! when it is ready for another tranmission, but in case this is missed, the timeout will recover. 2000 ms is the default (2 s).
 updateWait | The plugin sends many updates to Homekit during an operation. It will wait this number of ms between updates to avoid overwhelming the channel. 50 ms is the default.
-tickFudge | The plugin keeps time with a tick function that relies on a timeout. A certain about of time is lost to overhead. This estimates and counters that effect. If the plugins timings seem to be to long, make this number small and vice versa. Th eproper setting will depend on your hardware.
 
 ## Debug Flags
 
