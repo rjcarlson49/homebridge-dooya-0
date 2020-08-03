@@ -36,7 +36,9 @@ If the remote being simulated uses similar encoding, but with different timings,
 can download a configuration string to the transmitter to adapt it to the specific remote
 that must be simulated.
 
-### [Arduino 433 MHx Transmitter](https://github.com/rjcarlson49/Xmit_433.0)
+The transmitter code is here: [Arduino 433 MHx Transmitter](https://github.com/rjcarlson49/Xmit_433.0).
+
+A test mode is available if you do not have this hardware yet.
 
 ## Installation
 
@@ -96,6 +98,7 @@ Select Plugins/Dooya Shade Controller/Settings on the UI. This will take you to 
         "endOfRowOff": 9000,
         "endOfMsgOff": 6000,
         "dataPin": 12,
+        "testMode": false,
         "debugFlags": 6,
     }
 ```
@@ -149,6 +152,10 @@ Name | Description
 +2 | Requests for transmission of command codes via the Arduino.
 +4 | Show the text sent back by the Arduino transmitter.
 +8 | Other - all other debug output.
+
+## Test Mode
+
+When set to true, the plugin runs in test mode. In this mode the serial port to the Arduino is not opened and the commands are not transmitted to the shades. This can be used for testing when you do not want to affect the shades, or when you do not yet have the Aurduino transmitter, but want to try out the plugin.
 
 ## Decoding Your Remote
 

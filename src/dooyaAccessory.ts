@@ -552,7 +552,19 @@ export class DooyaAccessory {
   newTickTime(pos: number, prevTickTime: number): number {
     const expected = this.sigDigits((Math.abs(pos - this.calibrateStartPos) / 100) * this.maxTime, 2);
     const actual = this.sigDigits((this.platform.now() - this.calibrateStartTime), 2); // Get seconds since reportStart
-    const result = this.sigDigits(expected / actual, 2);
+    let result: number;
+    if (actual * expected === 0) {
+      // Avoid NaN
+      result = 1;
+    } else {
+      result = this.sigDigits(expected / actual, 2);
+      // Avoid wide swings
+      if (result > 1.2) {
+        result = 1.2;
+      } else if (result < .8) {
+        result = .8;
+      }
+    }
     this.logTimeCh(D.TICK, 'newTickTime ' + result + ' = ' + expected + '/' + actual + ' => ' + prevTickTime*result);
     return this.sigDigits(prevTickTime * result, 0);
   } // newTickTime

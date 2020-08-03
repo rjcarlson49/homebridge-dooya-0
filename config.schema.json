@@ -140,6 +140,13 @@
         "required": true,
         "default": 0
       },
+      "testMode": {
+        "title": "Test Mode",
+        "description": "If true, commands are not transmitted, use for testing only",
+        "type": "boolean",
+        "required": true,
+        "default": false
+      },
       "shades": {
         "title": "Shade Channels",
         "required": true,

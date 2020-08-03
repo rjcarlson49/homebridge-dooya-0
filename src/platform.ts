@@ -29,6 +29,7 @@ export class DooyaHomebridgePlatform implements DynamicPlatformPlugin {
   public readonly accessories: PlatformAccessory[] = [];
 
   private debugFlags = 0;
+  private testMode = false;
   private SerialPort;
   private arduinoPort;
   private Delimiter;
@@ -38,7 +39,7 @@ export class DooyaHomebridgePlatform implements DynamicPlatformPlugin {
   private requestWait = 200;
   private xmitQueue;
   private xmitAvailable = true;
-  private xmitWait = 1000;
+  private xmitWait = 2000;
   private xmitTimeoutObject;
   
   private nowBase = 0;
@@ -52,12 +53,7 @@ export class DooyaHomebridgePlatform implements DynamicPlatformPlugin {
     this.log.debug('Finished initializing DooyaController platform:', this.config.name);
     this.log.info('Serial Port:', this.config.serialPort);
 
-    this.SerialPort = require('serialport');
-    this.arduinoPort = new this.SerialPort(this.config.serialPort, {baudRate: 115200});
-    this.Delimiter = require('@serialport/parser-delimiter');
-    this.arduinoPortParser = this.arduinoPort.pipe(new this.Delimiter({ delimiter: '\n' }));
-    //parser.on('data', console.log) // emits data after every '\n'
-    this.arduinoPortParser.on('data', this.arduinoPortRead.bind(this));
+    this.testMode = this.config.testMode;
 
     this.debugFlags = this.config.debugFlags;
 
@@ -70,6 +66,21 @@ export class DooyaHomebridgePlatform implements DynamicPlatformPlugin {
     this.xmitAvailable = true;
     this.xmitTimeoutObject = undefined;
 
+    if (this.testMode) {
+      this.SerialPort = undefined;
+      this.arduinoPort = undefined;
+      this.Delimiter = undefined;
+      this.arduinoPortParser = undefined;
+      this.xmitWait = 500; // half second timeout
+    } else {
+      this.SerialPort = require('serialport');
+      this.arduinoPort = new this.SerialPort(this.config.serialPort, {baudRate: 115200});
+      this.Delimiter = require('@serialport/parser-delimiter');
+      this.arduinoPortParser = this.arduinoPort.pipe(new this.Delimiter({ delimiter: '\n' }));
+      //parser.on('data', console.log) // emits data after every '\n'
+      this.arduinoPortParser.on('data', this.arduinoPortRead.bind(this));
+    }
+    
     this.logTime(D.ANY, 'requestWait: ' + this.requestWait + ' xmitWait: ' + this.xmitWait);
     
     this.nowBase = 0;
@@ -171,7 +182,9 @@ export class DooyaHomebridgePlatform implements DynamicPlatformPlugin {
     this.xmitAvailable = false;
     this.xmitTimeoutObject = setTimeout(this.xmitTimeout.bind(this), this.xmitWait); 
     const cmd = String(tuple[0]);
-    this.arduinoPort.write(cmd + '\n');
+    if (!this.testMode) {
+      this.arduinoPort.write(cmd + '\n');
+    }
     tuple[1](); // Callback to inform caller that command has been sent
     this.logTime(D.XMIT_Q, 'Ch ' + tuple[2] + '  xmit ' + cmd);
   }
@@ -285,7 +298,9 @@ export class DooyaHomebridgePlatform implements DynamicPlatformPlugin {
 
     this.log.info('Transmitter Config: ' + xmitConfig);
     if (this.config.enableTransmitterConfig) {
-      //this.arduinoPort.write(xmitConfig + '\n');
+      if (!this.testMode) {
+        this.arduinoPort.write(xmitConfig + '\n');
+      }
     }
   }
 
