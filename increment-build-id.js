@@ -6,11 +6,11 @@ fs.readFile('src/metadata.json', (err, content) => {
     throw err;
   }
   var metadata = JSON.parse(content);
+  console.log('Build number: ' + metadata.build);
   metadata.build = metadata.build + 1;
   fs.writeFile('src/metadata.json', JSON.stringify(metadata), err => {
     if (err) {
       throw err;
     }
-    console.log('Build number: ' + metadata.build);
   });
 });

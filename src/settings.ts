@@ -6,4 +6,4 @@ export const PLATFORM_NAME = 'DooyaController';
 /**
  * This must match the name of your plugin as defined the package.json
  */
-export const PLUGIN_NAME = 'homebridge-dooya';
+export const PLUGIN_NAME = 'homebridge-dooya-0';
