@@ -22,8 +22,8 @@
   "scripts": {
     "lint": "eslint src/**.ts",
     "watch": "npm run build && npm link && nodemon",
-    "build": "rimraf ./dist && tsc && node increment-build-id.js",
-    "rebuild": "rimraf ./dist && tsc",
+    "devbuild": "node increment-build-id.js && rimraf ./dist && tsc",
+    "build": "rimraf ./dist && tsc",
     "prepublishOnly": "npm run lint && npm run build"
   },
   "keywords": [
