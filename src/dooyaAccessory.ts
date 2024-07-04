@@ -108,6 +108,7 @@ export class DooyaAccessory {
     this.service = this.accessory.getService(this.platform.Service.WindowCovering) 
                 || this.accessory.addService(this.platform.Service.WindowCovering);
     
+
     this.swServiceOpen = <Service>this.accessory.getServiceById(this.platform.Service.Switch, 'Open');
     if (!this.swServiceOpen) {
       this.swServiceOpen = new this.platform.Service.Switch(this.displayName + ' Open', 'Open');
