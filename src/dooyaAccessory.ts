@@ -23,8 +23,8 @@ enum PosState {
  */
 export class DooyaAccessory {
   private service: Service;
-  private swServiceOpen: Service;
-  private swServiceClose: Service;
+  //private swServiceOpen: Service;
+  //private swServiceClose: Service;
 
   private enabled: boolean;         // When false, the shade never moves or appears to move in the app
 
@@ -108,7 +108,7 @@ export class DooyaAccessory {
     this.service = this.accessory.getService(this.platform.Service.WindowCovering) 
                 || this.accessory.addService(this.platform.Service.WindowCovering);
     
-
+/*
     this.swServiceOpen = <Service>this.accessory.getServiceById(this.platform.Service.Switch, 'Open');
     if (!this.swServiceOpen) {
       this.swServiceOpen = new this.platform.Service.Switch(this.displayName + ' Open', 'Open');
@@ -129,7 +129,7 @@ export class DooyaAccessory {
         this.logCh(D.ANY, 'New Close Switch Service -- Failed!');
       }
     } 
-    
+  */  
     // set the service name, this is what is displayed as the default name on the Home app
     // in this example we are using the name we stored in the `accessory.context` in the `discoverDevices` method.
     this.service.setCharacteristic(this.platform.Characteristic.Name, this.displayName);
@@ -159,7 +159,7 @@ export class DooyaAccessory {
     // register handlers for the PositionState Characteristic
     this.service.getCharacteristic(this.platform.Characteristic.PositionState)
       .on('get', this.getPosState.bind(this));       // GET - bind to the 'getPosState` method below
-        
+    /*    
     // Set Handlers for Open/Close switches
     this.swServiceOpen.getCharacteristic(this.platform.Characteristic.On)!
       .on('set', this.setSwitchOpen.bind(this))       // SET - bind to the 'setSwitchOpen` method below
@@ -168,6 +168,7 @@ export class DooyaAccessory {
     this.swServiceClose.getCharacteristic(this.platform.Characteristic.On)!
       .on('set', this.setSwitchClose.bind(this))       // SET - bind to the 'setSwitchClose` method below
       .on('get', this.getSwitchClose.bind(this));       // SET - bind to the 'getSwitchClose` method below
+*/
 
     // EXAMPLE ONLY
     // Example showing how to update the state of a Characteristic asynchronously instead
@@ -201,6 +202,7 @@ export class DooyaAccessory {
    * @example
    * this.service.updateCharacteristic(this.platform.Characteristic.On, true)
    */
+  /*
   setSwitchOpen(value: CharacteristicValue, callback: CharacteristicSetCallback) {
     if (!this.enabled && !this.groupCode) {
       callback(new Error('Disabled'));
@@ -244,7 +246,7 @@ export class DooyaAccessory {
     this.logTimeCh(D.OTHER, 'getSwitchClose ' + this.swCloseOn);
     callback(null, this.swCloseOn);
   }
-
+*/
   getCurrentPos(callback: CharacteristicGetCallback) {
 
     this.logTimeCh(D.OTHER, 'Get Characteristic CurrentPos: ' + this.currentPosition);
@@ -570,7 +572,7 @@ export class DooyaAccessory {
     return this.sigDigits(prevTickTime * result, 0);
   } // newTickTime
   
-  adjustSwitches() {
+  adjustSwitches() {/*
     if (this.silent) {
       // Switches stay off during silent running
       if (this.swCloseOn) {
@@ -611,7 +613,7 @@ export class DooyaAccessory {
         this.swOpenOn = false;
         this.updateSwitchOpen();
       }
-    }
+    }*/
   }
 
   showTick() {
@@ -671,6 +673,7 @@ export class DooyaAccessory {
     this.service.getCharacteristic(this.platform.Characteristic.TargetPosition).updateValue(this.targetPosition);
   }
 
+  /*
   updateSwitchOpen() {
     const s = 'Ch[' + this.channelNum + '] updateSwitchOpen ' + this.swOpenOn;
     this.platform.requestUpdateSlot(s, this.updateSwitchOpenCB.bind(this));
@@ -690,7 +693,7 @@ export class DooyaAccessory {
     this.logTimeCh(D.OTHER, 'Update Close: ' + this.swCloseOn);
     this.swServiceClose.getCharacteristic(this.platform.Characteristic.On).updateValue(this.swCloseOn);
   }
-
+*/
   dummyCallback() {
     return;
   }
